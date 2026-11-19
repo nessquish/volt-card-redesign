@@ -17,15 +17,63 @@
 
 Изменённые и новые файлы: `app/pages/product.php`, `app/pages/reviews.php`, `app/views/review-card.php`, `app/views/review-summary.php`, `app/views/header.php`, `app/functions.php`, `app/database.php`, `database/schema.sql`, `public/reviews.php`, `public/assets/css/product-v2.css`.
 
-## Запуск
+## Быстрый запуск
 
-Нужен PHP 8.1+ с расширениями `pdo_sqlite` и `mbstring`.
+### Требования
+
+- PHP 8.1 или новее;
+- включённые расширения `pdo_sqlite` и `mbstring`;
+- любой современный браузер;
+- никаких внешних сервисов и платных зависимостей.
+
+Проверить расширения можно командой:
 
 ```bash
-cd public
+php -m
+```
+
+В списке должны быть `PDO`, `pdo_sqlite`, `sqlite3` (необязательно), `mbstring`.
+
+### Windows
+
+```bat
+cd volt-card-redesign\public
 php -S localhost:8000
 ```
 
-Сайт откроется на http://localhost:8000, база создаётся при первом запуске.
+Или запустите `start.bat` из корня проекта.
 
-Для входа: покупатель `user@test.local` / `User12345`, администратор `admin@test.local` / `Admin12345`.
+### Linux / macOS
+
+```bash
+cd volt-card-redesign/public
+php -S localhost:8000
+```
+
+Или:
+
+```bash
+chmod +x start.sh
+./start.sh
+```
+
+После запуска откройте:
+
+**http://localhost:8000**
+
+Альтернативный запуск из корня проекта:
+
+```bash
+php -S localhost:8000 -t public
+```
+
+> Важно: точкой входа должен быть каталог `public`, а не корень проекта. Файлы базы данных, конфигурации и материалы преподавателя не должны быть доступны по HTTP.
+
+## Демонстрационные аккаунты
+
+| Роль | Email | Пароль |
+|---|---|---|
+| Покупатель | `user@test.local` | `User12345` |
+| Администратор | `admin@test.local` | `Admin12345` |
+
+Дополнительный покупатель для проверки списка клиентов: `maria@test.local` / `Maria12345`.
