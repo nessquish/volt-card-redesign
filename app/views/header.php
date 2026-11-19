@@ -15,6 +15,9 @@ $flashes = get_flashes();
     <title><?= e($pageTitle) ?></title>
     <link rel="icon" href="<?= asset('images/favicon.svg') ?>" type="image/svg+xml">
     <link rel="stylesheet" href="<?= asset('css/style.css') ?>?v=3">
+<?php foreach (($extraCss ?? []) as $extra): ?>
+    <link rel="stylesheet" href="<?= asset($extra) ?>?v=1">
+<?php endforeach; ?>
 </head>
 <body class="<?= e($bodyClass) ?>">
 <a class="skip-link" href="#main">Перейти к содержимому</a>

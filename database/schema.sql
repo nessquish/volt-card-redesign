@@ -76,3 +76,20 @@ CREATE INDEX idx_orders_user ON orders(user_id);
 CREATE INDEX idx_orders_status ON orders(status);
 CREATE INDEX idx_order_items_order ON order_items(order_id);
 CREATE INDEX idx_cart_key ON cart_items(cart_key);
+
+CREATE TABLE reviews (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id INTEGER NOT NULL REFERENCES products(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    author TEXT NOT NULL,
+    rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    pros TEXT NOT NULL DEFAULT '',
+    cons TEXT NOT NULL DEFAULT '',
+    comment TEXT NOT NULL DEFAULT '',
+    photos INTEGER NOT NULL DEFAULT 0,
+    helpful INTEGER NOT NULL DEFAULT 0,
+    store_reply TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_reviews_product ON reviews(product_id);

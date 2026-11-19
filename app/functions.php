@@ -242,7 +242,7 @@ function delivery_cost(string $method, int $subtotal): int
     return match ($method) {
         'express' => 990,
         'pickup' => 0,
-        default => $subtotal > 60000 ? 0 : 590,
+        default => $subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : 590, // один порог (50 000 ₽) и в корзине, и при оформлении
     };
 }
 
@@ -346,4 +346,92 @@ function plural_ru(int $number, string $one, string $few, string $many): string
         return $few;
     }
     return $many;
+}
+
+
+/* ---------- отзывы о товарах ---------- */
+
+function ru_date(?string $date): string
+{
+    $months = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+    $ts = $date ? strtotime($date) : false;
+    if ($ts === false) {
+        return '—';
+    }
+    return (int) date('j', $ts) . ' ' . $months[(int) date('n', $ts) - 1] . ' ' . date('Y', $ts);
+}
+
+function stars_html(int $n): string
+{
+    $n = max(0, min(5, $n));
+    return '<span class="pv-stars" aria-label="Оценка ' . $n . ' из 5">' . str_repeat('★', $n) . '<i>' . str_repeat('★', 5 - $n) . '</i></span>';
+}
+
+function reviews_summary(int $productId): array
+{
+    $by = [5 => 0, 4 => 0, 3 => 0, 2 => 0, 1 => 0];
+    $stmt = db()->prepare('SELECT rating, COUNT(*) AS c FROM reviews WHERE product_id = ? GROUP BY rating');
+    $stmt->execute([$productId]);
+    foreach ($stmt->fetchAll() as $row) {
+        $by[(int) $row['rating']] = (int) $row['c'];
+    }
+    $count = array_sum($by);
+    $sum = 0;
+    foreach ($by as $stars => $c) {
+        $sum += $stars * $c;
+    }
+    $extra = db()->prepare("SELECT SUM(photos > 0) AS photos, SUM(store_reply IS NOT NULL AND store_reply <> '') AS replies FROM reviews WHERE product_id = ?");
+    $extra->execute([$productId]);
+    $e = $extra->fetch();
+
+    return [
+        'count' => $count,
+        'avg' => $count ? round($sum / $count, 1) : 0.0,
+        'by' => $by,
+        'recommend' => $count ? (int) round(($by[5] + $by[4]) / $count * 100) : 0,
+        'photos' => (int) ($e['photos'] ?? 0),
+        'replies' => (int) ($e['replies'] ?? 0),
+    ];
+}
+
+/** Отзывы товара с фильтрами: photo=1, reply=1, stars=1..5; sort: helpful | new | high | low. */
+function reviews_list(int $productId, array $filters, int $limit): array
+{
+    $where = ['product_id = ?'];
+    $params = [$productId];
+    if (!empty($filters['photo'])) {
+        $where[] = 'photos > 0';
+    }
+    if (!empty($filters['reply'])) {
+        $where[] = "store_reply IS NOT NULL AND store_reply <> ''";
+    }
+    $stars = (int) ($filters['stars'] ?? 0);
+    if ($stars >= 1 && $stars <= 5) {
+        $where[] = 'rating = ?';
+        $params[] = $stars;
+    }
+    $orderBy = match ($filters['sort'] ?? 'helpful') {
+        'new' => 'created_at DESC, id DESC',
+        'high' => 'rating DESC, helpful DESC, id DESC',
+        'low' => 'rating ASC, helpful DESC, id DESC',
+        default => 'helpful DESC, created_at DESC, id DESC',
+    };
+    $whereSql = implode(' AND ', $where);
+    $count = db()->prepare("SELECT COUNT(*) FROM reviews WHERE {$whereSql}");
+    $count->execute($params);
+    $total = (int) $count->fetchColumn();
+    $stmt = db()->prepare("SELECT * FROM reviews WHERE {$whereSql} ORDER BY {$orderBy} LIMIT " . max(1, $limit));
+    $stmt->execute($params);
+
+    return ['items' => $stmt->fetchAll(), 'total' => $total];
+}
+
+/** Способы получения для карточки товара: цена доставки считается тем же расчётом, что в корзине и при оформлении. */
+function product_delivery_options(int $price): array
+{
+    return [
+        ['label' => 'Курьер · 1–2 дня', 'cost' => delivery_cost('courier', $price), 'on' => true],
+        ['label' => 'Экспресс · сегодня', 'cost' => delivery_cost('express', $price), 'on' => false],
+        ['label' => 'Самовывоз · сегодня', 'cost' => delivery_cost('pickup', $price), 'on' => false],
+    ];
 }

@@ -22,172 +22,220 @@ if (!$product) {
 
 $specs = product_specs($product);
 $stock = (int) $product['stock_quantity'];
-$discount = (int) $product['old_price'] > (int) $product['price']
-    ? (int) round((1 - (int) $product['price'] / (int) $product['old_price']) * 100)
-    : 0;
+$price = (int) $product['price'];
+$oldPrice = (int) $product['old_price'];
+$discount = $oldPrice > $price ? (int) round((1 - $price / $oldPrice) * 100) : 0;
+$saving = $oldPrice > $price ? $oldPrice - $price : 0;
+
+// Отзывы берутся из базы: рейтинг и число отзывов считаются по настоящим данным
+$summary = reviews_summary($productId);
+$latest = reviews_list($productId, ['sort' => 'helpful'], 2)['items'];
+$deliveryOptions = product_delivery_options($price);
+$reviewImage = $product['image'];
+
 $pageTitle = $product['name'] . ' — купить в ВОЛЬТ';
 $metaDescription = mb_substr($product['description'], 0, 160);
-$bodyClass = 'page-product';
+$bodyClass = 'page-product page-pv';
+$extraCss = ['css/product-v2.css'];
 
+// Похожие товары: текущий товар в список не попадает
 $relatedStmt = db()->prepare(
     'SELECT p.*, c.name AS category_name, c.slug AS category_slug
      FROM products p
      JOIN categories c ON c.id = p.category_id
-     WHERE p.category_id = ? AND p.is_active = 1
+     WHERE p.category_id = ? AND p.is_active = 1 AND p.id <> ?
      ORDER BY p.id ASC
      LIMIT 4'
 );
-$relatedStmt->execute([(int) $product['category_id']]);
+$relatedStmt->execute([(int) $product['category_id'], $productId]);
 $related = $relatedStmt->fetchAll();
+
 include APP_ROOT . '/app/views/header.php';
 ?>
-<div class="page-head page-head--compact">
+<div class="pv">
     <div class="container">
-        <nav class="breadcrumbs" aria-label="Хлебные крошки">
+        <nav class="pv-crumbs" aria-label="Хлебные крошки">
             <a href="/">Главная</a><span>/</span>
             <a href="/catalog.php">Каталог</a><span>/</span>
             <a href="/catalog.php?category=<?= e($product['category_slug']) ?>"><?= e($product['category_name']) ?></a><span>/</span>
             <span><?= e($product['name']) ?></span>
         </nav>
-    </div>
-</div>
 
-<section class="product section section--flush">
-    <div class="container">
-        <div class="product-detail">
-            <div class="product-gallery">
-                <div class="product-gallery__main">
-                    <?php if ($discount > 0): ?><span class="product-gallery__badge">−<?= $discount ?>%</span><?php endif; ?>
-                    <img src="<?= e(product_image($product['image'])) ?>" alt="<?= e($product['name']) ?>" width="800" height="600">
+        <div class="pv-top">
+            <div class="pv-bigimg">
+                <div class="pv-tags">
+                    <?php if ((int) $product['is_featured']): ?><span class="pv-tag">Хит</span><?php endif; ?>
+                    <?php if ($discount > 0): ?><span class="pv-tag pv-tag--red">−<?= $discount ?>%</span><?php endif; ?>
+                    <?php if ($stock > 0 && $stock <= 3): ?><span class="pv-tag pv-tag--warn">Осталось <?= $stock ?></span><?php endif; ?>
                 </div>
-                <div class="product-gallery__notes">
-                    <span><svg viewBox="0 0 24 24" fill="none"><path d="M12 3 5 6v5c0 4.6 2.9 8.1 7 10 4.1-1.9 7-5.4 7-10V6l-7-3Z" stroke="currentColor" stroke-width="1.6"/><path d="m9 12 2 2 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg> Официальная гарантия</span>
-                    <span><svg viewBox="0 0 24 24" fill="none"><path d="M3 7h11v10H3V7Zm11 3h4l3 3v4h-7v-7Z" stroke="currentColor" stroke-width="1.6"/><circle cx="7" cy="18" r="2" stroke="currentColor" stroke-width="1.6"/><circle cx="18" cy="18" r="2" stroke="currentColor" stroke-width="1.6"/></svg> Доставка 1–2 дня</span>
-                    <span><svg viewBox="0 0 24 24" fill="none"><path d="M4 12a8 8 0 1 1 2.3 5.7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M4 17v-5h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg> Возврат 14 дней</span>
-                </div>
+                <img src="<?= e(product_image($product['image'])) ?>" alt="<?= e($product['name']) ?>" width="800" height="600">
             </div>
 
-            <div class="product-info">
-                <div class="product-info__top">
-                    <a class="product-info__category" href="/catalog.php?category=<?= e($product['category_slug']) ?>"><?= e($product['category_name']) ?></a>
-                    <span class="product-info__sku">Арт. <?= str_pad((string) $product['id'], 5, '0', STR_PAD_LEFT) ?></span>
-                </div>
-                <h1><?= e($product['name']) ?></h1>
-                <div class="product-rating">
-                    <span class="stars">★★★★★</span>
-                    <span>4,8</span>
-                    <a href="#details">24 отзыва</a>
-                </div>
-                <p class="product-info__description"><?= e($product['description']) ?></p>
+            <div class="pv-below">
+                <div class="pv-head">
+                    <div class="pv-meta"><a href="/catalog.php?category=<?= e($product['category_slug']) ?>"><?= e($product['category_name']) ?></a> · Артикул <?= str_pad((string) $product['id'], 5, '0', STR_PAD_LEFT) ?></div>
+                    <h1><?= e($product['name']) ?></h1>
 
-                <div class="product-buy">
-                    <div class="product-buy__price">
-                        <strong><?= format_price($product['price']) ?></strong>
-                        <?php if ($discount > 0): ?>
-                            <s><?= format_price($product['old_price']) ?></s>
-                            <span class="discount-pill">−<?= $discount ?>%</span>
+                    <div class="pv-rating">
+                        <?php if ($summary['count'] > 0): ?>
+                            <?= stars_html((int) round($summary['avg'])) ?>
+                            <b><?= str_replace('.', ',', (string) $summary['avg']) ?></b>
+                            <a href="/reviews.php?id=<?= $productId ?>"><?= $summary['count'] ?> <?= plural_ru($summary['count'], 'отзыв', 'отзыва', 'отзывов') ?></a>
+                            <span class="pv-ok"><?= $summary['recommend'] ?>% рекомендуют</span>
+                        <?php else: ?>
+                            <span class="pv-muted">Отзывов пока нет</span> · <a href="/reviews.php?id=<?= $productId ?>#write">Оставить первый отзыв</a>
                         <?php endif; ?>
                     </div>
-                    <div class="product-stock<?= $stock === 0 ? ' product-stock--empty' : '' ?>">
-                        <span class="stock-dot"></span>
-                        <?php if ($stock === 0): ?>
-                            Нет в наличии
-                        <?php elseif ($stock <= 3): ?>
-                            В наличии: <?= $stock ?> шт. — успейте заказать
-                        <?php else: ?>
-                            В наличии: <?= $stock ?> шт.
-                        <?php endif; ?>
+
+                    <p class="pv-lead"><?= e($product['description']) ?></p>
+
+                    <?php if ($specs): ?>
+                        <div class="pv-specs">
+                            <?php foreach (array_slice($specs, 0, 4, true) as $label => $value): ?>
+                                <div><span><?= e((string) $label) ?></span><b><?= e((string) $value) ?></b></div>
+                            <?php endforeach; ?>
+                        </div>
+                        <a class="pv-link" href="#specs">Все характеристики</a>
+                    <?php endif; ?>
+                </div>
+
+                <div class="pv-box">
+                    <div class="pv-price">
+                        <strong><?= format_price($price) ?></strong>
+                        <?php if ($saving > 0): ?><s><?= format_price($oldPrice) ?></s><em>−<?= format_price($saving) ?></em><?php endif; ?>
+                    </div>
+                    <div class="pv-stock<?= $stock === 0 ? ' is-empty' : '' ?>">
+                        <?php if ($stock === 0): ?>Нет в наличии<?php elseif ($stock <= 3): ?>Осталось <?= $stock ?> шт. — успейте заказать<?php else: ?>В наличии <?= $stock ?> шт.<?php endif; ?>
+                    </div>
+
+                    <div class="pv-delivery-title">Получение</div>
+                    <div class="pv-chips">
+                        <?php foreach ($deliveryOptions as $opt): ?>
+                            <span class="pv-chip<?= $opt['on'] ? ' is-on' : '' ?>"><?= e($opt['label']) ?> · <?= $opt['cost'] === 0 ? 'бесплатно' : format_price($opt['cost']) ?></span>
+                        <?php endforeach; ?>
                     </div>
 
                     <?php if ($stock > 0): ?>
-                        <form class="product-buy__form" action="/cart.php" method="post">
+                        <form class="pv-buy" action="/cart.php" method="post">
                             <?= csrf_field() ?>
                             <input type="hidden" name="action" value="add">
                             <input type="hidden" name="product_id" value="<?= (int) $product['id'] ?>">
-                            <div class="quantity" data-quantity>
+                            <div class="pv-qty" data-quantity>
                                 <button type="button" data-qty-minus aria-label="Уменьшить количество">−</button>
-                                <input type="number" name="quantity" value="1" min="1" max="99" aria-label="Количество">
+                                <input type="number" name="quantity" value="1" min="1" max="<?= min(99, $stock) ?>" aria-label="Количество">
                                 <button type="button" data-qty-plus aria-label="Увеличить количество">+</button>
                             </div>
-                            <button class="button button--lg product-buy__button" type="submit">
-                                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3.5 4.5h2l2 11h10.2l2-8H6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="19" r="1.4" fill="currentColor"/><circle cx="17.5" cy="19" r="1.4" fill="currentColor"/></svg>
-                                Добавить в корзину
-                            </button>
+                            <button class="pv-btn" type="submit">В корзину · <?= format_price($price) ?></button>
                         </form>
                     <?php else: ?>
-                        <button class="button button--lg product-buy__button" type="button" disabled>Нет в наличии</button>
+                        <button class="pv-btn pv-btn--off" type="button" disabled>Нет в наличии</button>
                     <?php endif; ?>
-
-                    <div class="product-buy__perks">
-                        <div><span>01</span><p><strong>Оплата при получении</strong>Проверьте товар перед оплатой</p></div>
-                        <div><span>02</span><p><strong>Доставка по России</strong>Рассчитаем при оформлении</p></div>
-                    </div>
                 </div>
             </div>
         </div>
-    </div>
-</section>
 
-<section class="section section--details" id="details">
-    <div class="container">
-        <div class="details-layout">
-            <div class="details-main">
-                <div class="section-head section-head--small">
-                    <div>
-                        <div class="eyebrow"><span></span> О товаре</div>
-                        <h2>Описание и характеристики</h2>
-                    </div>
+        <div class="pv-tabs" role="tablist" aria-label="Разделы карточки">
+            <a href="#about" role="tab" data-tab="about" class="is-on" aria-selected="true">О товаре</a>
+            <?php if ($specs): ?><a href="#specs" role="tab" data-tab="specs" aria-selected="false">Характеристики</a><?php endif; ?>
+            <a href="#reviews" role="tab" data-tab="reviews" aria-selected="false">Отзывы <em><?= $summary['count'] ?></em></a>
+            <a href="#delivery" role="tab" data-tab="delivery" aria-selected="false">Доставка и возврат</a>
+        </div>
+
+        <section class="pv-card pv-panel" id="about" data-panel="about" role="tabpanel">
+            <h2>О товаре</h2>
+            <p><?= e($product['description']) ?></p>
+        </section>
+
+        <?php if ($specs): ?>
+            <section class="pv-card pv-panel" id="specs" data-panel="specs" role="tabpanel">
+                <h2>Характеристики</h2>
+                <div class="pv-spec-table">
+                    <?php foreach ($specs as $label => $value): ?>
+                        <div><span><?= e((string) $label) ?></span><b><?= e((string) $value) ?></b></div>
+                    <?php endforeach; ?>
                 </div>
-                <p class="details-description"><?= e($product['description']) ?></p>
-                <?php if ($specs): ?>
-                    <div class="specs">
-                        <?php foreach ($specs as $label => $value): ?>
-                            <div class="specs__row">
-                                <span><?= e((string) $label) ?></span>
-                                <strong><?= e((string) $value) ?></strong>
-                            </div>
-                        <?php endforeach; ?>
-                    </div>
+            </section>
+        <?php endif; ?>
+
+        <section class="pv-reviews pv-panel" id="reviews" data-panel="reviews" role="tabpanel">
+            <aside class="pv-card pv-summary">
+                <h2>Отзывы покупателей</h2>
+                <?php if ($summary['count'] > 0): ?>
+                    <?php include APP_ROOT . '/app/views/review-summary.php'; ?>
+                <?php else: ?>
+                    <p class="pv-muted">Пока никто не оставил отзыв. Станьте первым.</p>
+                <?php endif; ?>
+                <a class="pv-btn pv-btn--ghost" href="/reviews.php?id=<?= $productId ?>#write">Написать отзыв</a>
+            </aside>
+            <div class="pv-list">
+                <?php foreach ($latest as $review): ?>
+                    <?php include APP_ROOT . '/app/views/review-card.php'; ?>
+                <?php endforeach; ?>
+                <?php if ($summary['count'] > 0): ?>
+                    <div class="pv-more"><a class="pv-btn" href="/reviews.php?id=<?= $productId ?>">Все отзывы · <?= $summary['count'] ?> →</a></div>
                 <?php endif; ?>
             </div>
-            <aside class="details-aside">
-                <div class="delivery-card">
-                    <h3>Доставка и оплата</h3>
-                    <div class="delivery-card__item">
-                        <span class="delivery-card__icon"><svg viewBox="0 0 24 24" fill="none"><path d="M3 7h11v10H3V7Zm11 3h4l3 3v4h-7v-7Z" stroke="currentColor" stroke-width="1.6"/><circle cx="7" cy="18" r="2" stroke="currentColor" stroke-width="1.6"/><circle cx="18" cy="18" r="2" stroke="currentColor" stroke-width="1.6"/></svg></span>
-                        <div><strong>Курьером — от 590 ₽</strong><span>По Новосибирску за 1–2 дня</span></div>
-                    </div>
-                    <div class="delivery-card__item">
-                        <span class="delivery-card__icon"><svg viewBox="0 0 24 24" fill="none"><path d="M4 20V9l8-5 8 5v11H4Z" stroke="currentColor" stroke-width="1.6"/><path d="M9 20v-6h6v6" stroke="currentColor" stroke-width="1.6"/></svg></span>
-                        <div><strong>Самовывоз — бесплатно</strong><span>Красный проспект, 25</span></div>
-                    </div>
-                    <div class="delivery-card__item">
-                        <span class="delivery-card__icon"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M3 10h18" stroke="currentColor" stroke-width="1.6"/></svg></span>
-                        <div><strong>Картой или наличными</strong><span>Онлайн и при получении</span></div>
-                    </div>
-                    <a class="text-link" href="/info.php?page=delivery">Все условия доставки <svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></a>
-                </div>
-            </aside>
-        </div>
-    </div>
-</section>
+        </section>
 
-<?php if ($related): ?>
-    <section class="section section--related">
-        <div class="container">
-            <div class="section-head">
-                <div>
-                    <div class="eyebrow"><span></span> С этой моделью смотрят</div>
-                    <h2>Похожие товары</h2>
+        <section class="pv-card pv-panel" id="delivery" data-panel="delivery" role="tabpanel">
+            <h2>Доставка и возврат</h2>
+            <div class="pv-info-grid">
+                <div><b>Курьером</b><span>1–2 дня по Новосибирску: бесплатно от <?= format_price(FREE_SHIPPING_THRESHOLD) ?>, иначе 590 ₽</span></div>
+                <div><b>Экспресс</b><span>В течение дня при заказе до 13:00, 990 ₽</span></div>
+                <div><b>Самовывоз</b><span>Красный проспект, 25, бесплатно</span></div>
+                <div><b>Оплата</b><span>Картой онлайн, картой или наличными при получении</span></div>
+            </div>
+            <a class="pv-link" href="/info.php?page=delivery">Все условия доставки</a>
+        </section>
+
+        <?php if ($related): ?>
+            <section class="pv-related">
+                <h2>Похожие товары</h2>
+                <div class="product-grid product-grid--four">
+                    <?php $current = $product; foreach ($related as $product): include APP_ROOT . '/app/views/product-card.php'; endforeach; $product = $current; ?>
                 </div>
-                <a class="text-link" href="/catalog.php?category=<?= e($product['category_slug']) ?>">Вся категория <svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></a>
-            </div>
-            <div class="product-grid product-grid--four">
-                <?php foreach ($related as $relatedProduct): ?>
-                    <?php $product = $relatedProduct; include APP_ROOT . '/app/views/product-card.php'; ?>
-                <?php endforeach; ?>
-            </div>
-        </div>
-    </section>
-<?php endif; ?>
+            </section>
+        <?php endif; ?>
+    </div>
+</div>
+<script>
+// Вкладки: показываем одну «страницу» за раз. Без JavaScript видны все разделы подряд.
+(function () {
+    var tabs = document.querySelectorAll('.pv-tabs [data-tab]');
+    var panels = document.querySelectorAll('[data-panel]');
+    if (!tabs.length || !panels.length) { return; }
+    function show(name, scroll) {
+        var found = false;
+        panels.forEach(function (p) { var on = p.dataset.panel === name; p.hidden = !on; if (on) { found = true; } });
+        if (!found) { return; }
+        tabs.forEach(function (t) {
+            var on = t.dataset.tab === name;
+            t.classList.toggle('is-on', on);
+            t.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        if (scroll) { document.querySelector('.pv-tabs').scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    }
+    tabs.forEach(function (t) {
+        t.addEventListener('click', function (e) {
+            e.preventDefault();
+            show(t.dataset.tab, false);
+            if (window.history && history.replaceState) { history.replaceState(null, '', '#' + t.dataset.tab); }
+        });
+    });
+    // обычные ссылки на раздел (например, «Все характеристики») тоже открывают нужную вкладку
+    document.querySelectorAll('a[href^="#"]:not([data-tab])').forEach(function (a) {
+        var name = a.getAttribute('href').slice(1);
+        if (document.querySelector('[data-panel="' + name + '"]')) {
+            a.addEventListener('click', function (e) { e.preventDefault(); show(name, true); });
+        }
+    });
+    var initial = location.hash.slice(1);
+    show(document.querySelector('[data-panel="' + initial + '"]') ? initial : 'about', false);
+    // переход по ссылке с #раздел на уже открытой странице
+    window.addEventListener('hashchange', function () {
+        var name = location.hash.slice(1);
+        if (document.querySelector('[data-panel="' + name + '"]')) { show(name, false); }
+    });
+})();
+</script>
 <?php include APP_ROOT . '/app/views/footer.php'; ?>
